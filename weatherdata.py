@@ -1,11 +1,18 @@
+import os
 import requests
 import pandas as pd
 import datetime as dt
+import matplotlib.pyplot as plt
 
 
 appid = ""
-with open("openweather_appid.txt") as f:
+# print(os.getcwd())
+os.chdir("..")
+# print(os.path.abspath(os.curdir))
+with open("openweather_app_id.txt") as f:
     appid = f.readlines()[0]
+
+print(appid)
 
 w_dict = {
     "start": "2022-09-16 12:00:00",
@@ -27,7 +34,6 @@ def test_weather_obj(weather_test_dict):
 class WeatherHistory:
     def __init__(self, start="", end="", interval=6, api_key="", lat=00.00001,
                  lon=00.0001, tz=""):
-        self._history_df = pd.DataFrame()
         self._start = dt.datetime.strptime(start, "%Y-%m-%d %H:%M:%S")
         self._end = dt.datetime.strptime(end, "%Y-%m-%d %H:%M:%S")
         self._interval = interval
@@ -74,6 +80,8 @@ class WeatherHistory:
         for col in ["dt", "sunrise", "sunset"]:
             df[col] = df[col].apply(lambda x: dt.datetime.fromtimestamp(int(x)))  # convert timestamp into datetime
         print(df)
+        # Convert temp from Kelvin to Celcius
+        df["temp"] = df["temp"].apply(lambda x: x - 273.15)
         self._hist = df
         return df
 
