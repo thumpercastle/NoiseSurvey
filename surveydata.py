@@ -1,4 +1,6 @@
 import csv
+import os
+
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -253,7 +255,7 @@ class SurveyData:
             plt.title("LAmax occurrences, night-time")
             plt.show()
 
-    def time_history_plot(self, sampling_period=15):
+    def plot_time_history(self, sampling_period=15, img_name="timehistory", img_format=".jpg"):
         # Define the colourmap
         viridis = cm.get_cmap("plasma")
         col = iter(np.linspace(0.0, 1, 4))
@@ -291,11 +293,12 @@ class SurveyData:
         ax1.grid(True, which="minor", axis="x", lw=0.5, color="black")     # Thinner lines on minor ticks
         print("showing....")
         plt.title("Time history")
+        img_pth = os.path.join(os.getcwd(), (img_name + img_format))
+        fig.savefig(img_pth)
         plt.show()
-        print("done")
+        return img_pth
 
     def l90_histogram_count(self, night_only=False, night_t=15, day_t=60, stat="count"):
-
         if not night_only:
             day_resampling_string = str(day_t) + "min"
             l90 = self.antilogs.resample(day_resampling_string).mean().apply(lambda x: np.round((10 * np.log10(x)), 0))
