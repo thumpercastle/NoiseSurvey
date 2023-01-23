@@ -15,6 +15,8 @@ class DataExport:
         self.doc = docx.Document()
 
     def spl_table(self, data, heading=None, decimals=False, dba_alignment="left"):
+        #TODO: Format the column headers
+
         # Add the table heading
         assert heading is not None
         self.doc.add_heading(heading, 1)

@@ -13,18 +13,18 @@ if __name__ == '__main__':
     weather_hist = test_weather_obj(w_dict)
     print(weather_hist)
     _, _, _, img = weather_hist.plot_time_history()
-
-    # Create Export object (handles the conversion of noise data into MS Word format)
+    #
+    # # Create Export object (handles the conversion of noise data into MS Word format)
     report = DataExport()
     report.figure(img, 12)
     report.figure(data.plot_time_history(), 15)
-
-    # Get N-th highest Lmax levels for each night, resampling the data where required
+    #
+    # # Get N-th highest Lmax levels for each night, resampling the data where required
     print(f"Lmaxes")
     print(data.get_nth_lmaxes(nth=10, sampling_period=2))
     report.spl_table(data.get_nth_lmaxes(), "Night-time Lmax") # Add an Lmax table to the MS Word file
-
-    # Get Daytime and Night-time Leqs and add tables to the MS Word file
+    #
+    # # Get Daytime and Night-time Leqs and add tables to the MS Word file
     print(f"Leqs")
     print(data.get_leq_summary())
     report.spl_table(data.get_leq_summary()[0], "Daytime Leq")
@@ -33,12 +33,12 @@ if __name__ == '__main__':
     report.export(path=os.getcwd())
 
     # # Plots
-    # data.lmax_histogram_by_day()
-    # data.lmax_histogram_count()
-    # data.time_history_plot()
-    # data.l90_histogram_count()
+    data.lmax_histogram_by_day()
+    data.lmax_histogram_count()
+    data.plot_time_history()
+    data.l90_histogram_count()
     #
 
     #
     # # Export the MS Word file
-    # report.export(path=os.getcwd())
+    report.export(path=os.getcwd())

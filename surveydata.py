@@ -70,6 +70,7 @@ class SurveyData:
         self.decimals = decimals
         self.csv_path = path
         self.master = pd.read_csv(path)
+        self._assign_header()
 
         self.meas_interval = meas_interval
 
@@ -96,13 +97,22 @@ class SurveyData:
         if self.evening_start != self.night_start:
             self.evenings = self._prep_evenings()   # This is a slice of master
 
-    def _prep_indices(self, drop_meter_ts=True):
-        self.master["Time"] = pd.DatetimeIndex(self.master["Time"], dayfirst=True)
-        self.master.set_index("Time", drop=True, inplace=True)
-        if drop_meter_ts:
-            self.master.drop(labels="Meter Timestamp", axis=1, inplace=True)
-        # Drop NaT indices
-        self.master = self.master.loc[pd.notnull(self.master.index)]
+    def _assign_header(self, indices=["LAeq", "LAFmax", "LA90", "Leq", "Lmax", "L90"]):
+        subheaders = self.master.columns.to_list()
+        superheaders = ["Time"]
+        for heading in indices:
+            for sub in subheaders:
+                if heading in sub:
+                    superheaders.append(heading)
+        print(len(superheaders))
+        print(superheaders)
+        print(len(subheaders))
+        print(subheaders)
+        self.master.columns = [superheaders, subheaders]
+
+    def _prep_indices(self):
+        self.master[("Time", "Time")] = pd.DatetimeIndex(self.master[("Time", "Time")], dayfirst=True)
+        self.master.set_index(("Time", "Time"), drop=True, inplace=True)
 
     def _prep_antilogs(self):
         return self.master.copy().apply(lambda x: np.power(10, (x/10)))
@@ -111,11 +121,11 @@ class SurveyData:
     def _prep_nights(self):
         nights = self.antilogs[(self.antilogs.index.hour >= self.night_start) |
                                (self.antilogs.index.hour < self.day_start)].copy()
-        nights.loc[:, "night_dates"] = nights.index
-        nights.loc[:, "night_dates"] = nights["night_dates"].apply(
+        nights.loc[:, ("night_dates", "night_dates")] = nights.index
+        nights.loc[:, ("night_dates", "night_dates")] = nights[("night_dates", "night_dates")].apply(
             lambda x: (x - pd.tseries.offsets.DateOffset(days=1)) if x.hour < self.day_start else x)
-        nights.set_index(pd.DatetimeIndex(nights["night_dates"]), drop=True, inplace=True)
-        nights.drop("night_dates", axis=1, inplace=True)
+        nights.set_index(pd.DatetimeIndex(nights[("night_dates", "night_dates")]), drop=True, inplace=True)
+        nights.drop(("night_dates", "night_dates"), axis=1, inplace=True)
         return nights
 
     def _prep_days(self):
@@ -127,21 +137,20 @@ class SurveyData:
                              (self.antilogs.index.hour < self.night_start)]
 
     def _daily_leqs(self):
-        night_leq = self.nights.groupby(self.nights.index.date).mean().apply(
+        night_leq = self.nights[["LAeq", "Leq"]].groupby(self.nights.index.date).mean().apply(
             lambda x: np.round((10 * np.log10(x)), self.decimals))
-        night_leq.drop("LAFmax", axis=1, inplace=True)  # Drop LAFmax column
-        day_leq = self.days.groupby(self.days.index.date).mean().apply(
+        day_leq = self.days[["LAeq", "Leq"]].groupby(self.days.index.date).mean().apply(
             lambda x: np.round((10 * np.log10(x)), self.decimals))
-        day_leq.drop("LAFmax", axis=1, inplace=True)  # Drop LAFmax column
         if self.evening_start is not None:
-            evening_leq = self.days.groupby(self.evenings.index.date).mean().apply(
+            evening_leq = self.days[["LAeq", "Leq"]].groupby(self.evenings.index.date).mean().apply(
                 lambda x: np.round((10 * np.log10(x)), self.decimals))
-            evening_leq.drop("LAFmax", axis=1, inplace=True)  # Drop LAFmax column
             return day_leq, evening_leq, night_leq
         else:
             return day_leq, night_leq
 
     def _convert_thirds_to_octaves(self):
+        #TODO: Fix this, having introduced multiheaders
+
         # Initialise new dataframe
         new_df = pd.DataFrame(self.antilogs[["LAeq", "LAFmax", "LA90"]])
 
@@ -169,23 +178,15 @@ class SurveyData:
         # Assign the single-octave band spectra
         self.antilogs = new_df.copy()
 
-        # Compare dataframes - testing only
-        # comp = self.antilogs[["LAeq", "LAFmax", "LA90"]].compare(new_df[["LAeq", "LAFmax", "LA90"]], align_axis=1, keep_shape=True, keep_equal=False)
-        # print(comp.isna().sum())
-
     def _recompute(self, t=10):
         new_df = pd.DataFrame(columns=self.antilogs.columns)
         resampling_string = str(t) + "min"
-        leqs = self.antilogs.resample(resampling_string).mean().apply(lambda x: np.round((10 * np.log10(x)), self.decimals))
-        leqs = leqs.loc[:, ~leqs.columns.str.contains("Lmax", case=True)]  # Drop Lmaxes
-        leqs = leqs.loc[:, ~leqs.columns.str.contains("LAmax", case=True)]  # Drop LAmaxes
+        leqs = self.antilogs[["LAeq", "Leq"]].resample(resampling_string).mean().apply(lambda x: np.round((10 * np.log10(x)), self.decimals))
         # TODO: Implement LA90s - currently it is taken from the Leq df
-        lmaxes = self.antilogs.resample(resampling_string).max().apply(lambda x: np.round((10 * np.log10(x)), self.decimals))
-        lmaxes = lmaxes.loc[:, ~lmaxes.columns.str.contains("Leq", case=True)]  # Drop Leqs
-        lmaxes = lmaxes.loc[:, ~lmaxes.columns.str.contains("LAeq", case=True)]  # Drop LAeqs
-        lmaxes = lmaxes.loc[:, ~lmaxes.columns.str.contains("LA90", case=True)]  # Drop LA90
+        lmaxes = self.antilogs[["LAFmax", "Lmax"]].resample(resampling_string).max().apply(lambda x: np.round((10 * np.log10(x)), self.decimals))
 
         # Assign leqs and lmaxes to new df
+        #TODO: Find more efficient way of doing this
         for col in leqs.columns:
             new_df[col] = leqs[col]
 
@@ -194,22 +195,15 @@ class SurveyData:
 
         return new_df
 
-    def get_leq_summary(self, drop_cols=["LA90", "31.5 Hz Leq"]):
+    def get_leq_summary(self):
         if self.evening_start is not None:
             # Drop the lmaxes
-            day, evening, night = self._daily_leqs().loc[:, ~self._daily_leqs.columns.str.contains("Lmax", case=True)]
-            day.drop(drop_cols, axis=1, inplace=True)
-            evening.drop(drop_cols, axis=1, inplace=True)
-            night.drop(drop_cols, axis=1, inplace=True)
+            day, evening, night = self._daily_leqs()
             return day, evening, night
-
         else:
             # Drop the lmaxes
             day, night = self._daily_leqs()
-            day.drop(drop_cols, axis=1, inplace=True)
-            night.drop(drop_cols, axis=1, inplace=True)
-            return day.loc[:, ~day.columns.str.contains("Lmax", case=True)],\
-                   night.loc[:, ~night.columns.str.contains("Lmax", case=True)]
+            return day, night
 
     def get_nth_lmaxes(self, nth=10, night_only=True, sampling_period=2, drop_cols=["LAeq", "LA90", "31.5 Hz Lmax"]):
         resampling_string = str(sampling_period) + "min"
@@ -219,12 +213,12 @@ class SurveyData:
             maxes = self.nights.resample(resampling_string).max().apply(lambda x: np.round((10 * np.log10(x)), self.decimals))
             maxes = maxes[(maxes.index.hour < self.day_start) |
                           (maxes.index.hour >= self.night_start)]   # Resample adds in missing rows. Drop them.
-            nth_highest = maxes.sort_values(by="LAFmax", ascending=False)
+            nth_highest = maxes.sort_values(by=("LAFmax", "LAFmax"), ascending=False)
             nth_highest = nth_highest.groupby(by=nth_highest.index.date).nth(nth - 1)
-            nth_highest = nth_highest.loc[:, ~maxes.columns.str.contains("Leq", case=True)] # Drop spectral Leqs
-            # Drop unwanted cols
-            nth_highest.drop(drop_cols, axis=1, inplace=True)
-            return nth_highest
+            # nth_highest = nth_highest.loc[:, ~maxes.columns.str.contains("Leq", case=True)] # Drop spectral Leqs
+            # # Drop unwanted cols
+            # nth_highest.drop(drop_cols, axis=1, inplace=True)
+            return nth_highest[["LAFmax", "Lmax"]]
 
     def lmax_histogram_by_day(self, night_only=True, sampling_period=2):
         resampling_string = str(sampling_period) + "min"
@@ -237,7 +231,8 @@ class SurveyData:
             sns.set_theme(style="darkgrid")
             maxes["Day of the week"] = maxes.index.day_name()
             # sns.set(rc={"figure.figsize": (10, 10)})
-            ax = sns.catplot(x="Day of the week", y="LAFmax", data=maxes, jitter=True)
+            ax = sns.catplot(x="Day of the week", y=("LAFmax", "LAFmax"), data=maxes, jitter=True)
+            plt.ylabel("LAFmax")
             plt.title("LAmax occurrences by day, night-time", pad=-10)
             plt.show()
 
@@ -251,7 +246,8 @@ class SurveyData:
                           (maxes.index.hour >= self.night_start)]   # Resample adds in missing rows. Drop them.
             sns.set_theme(style="darkgrid")
             maxes["Day of the week"] = maxes.index.day_name()
-            ax = sns.histplot(x="LAFmax", data=maxes, binwidth=1, stat=stat)
+            ax = sns.histplot(x=("LAFmax", "LAFmax"), data=maxes, binwidth=1, stat=stat)
+            plt.xlabel("LAFmax")
             plt.title("LAmax occurrences, night-time")
             plt.show()
 
@@ -271,9 +267,9 @@ class SurveyData:
         ax1.set_ylabel("Sound pressure level dB(A)")
         ax1.set_xlabel("Date")
         # TODO: implement custom colours
-        ax1.plot(prepped_df.index, prepped_df["LAeq"], color=viridis(next(col)), label="LAeq,T", lw=3)
-        ax1.plot(prepped_df.index, prepped_df["LA90"], color=viridis(next(col)), label="LA90,T", lw=3)
-        ax1.scatter(prepped_df.index, prepped_df["LAFmax"], s=8, color=viridis(next(col)), label="LAFmax", linewidths=3)
+        ax1.plot(prepped_df.index, prepped_df[("LAeq", "LAeq")], color=viridis(next(col)), label="LAeq,T", lw=3)
+        ax1.plot(prepped_df.index, prepped_df[("LA90", "LA90")], color=viridis(next(col)), label="LA90,T", lw=3)
+        ax1.scatter(prepped_df.index, prepped_df[("LAFmax", "LAFmax")], s=8, color=viridis(next(col)), label="LAFmax", linewidths=3)
         ax1.legend()
         # TODO: Try this with shorter or longer surveys
         # TODO: show hours at relevant intervals
@@ -306,7 +302,7 @@ class SurveyData:
                           (l90.index.hour < self.night_start)]   # Resample adds in missing rows. Drop them.
             sns.set_theme(style="darkgrid")
             l90["Day of the week"] = l90.index.day_name()
-            ax = sns.histplot(x="LA90", data=l90, binwidth=1, stat=stat)
+            ax = sns.histplot(x=("LA90", "LA90"), data=l90, binwidth=1, stat=stat)
             plt.title("LA90,%s, occurrences, daytime" % day_resampling_string)
             plt.show()
 
@@ -316,7 +312,8 @@ class SurveyData:
                       (l90.index.hour >= self.night_start)]   # Resample adds in missing rows. Drop them.
         sns.set_theme(style="darkgrid")
         l90["Day of the week"] = l90.index.day_name()
-        ax = sns.histplot(x="LA90", data=l90, binwidth=1, stat=stat)
+        ax = sns.histplot(x=("LA90", "LA90"), data=l90, binwidth=1, stat=stat)
+        plt.xlabel("LA90,T")
         plt.title("LA90,%s occurrences, night-time" % night_resampling_string)
         plt.show()
 
