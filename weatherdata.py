@@ -5,6 +5,9 @@ import datetime as dt
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
+#TODO: Implement geo codes
+#TODO: incorporate weather into Survey objects
+
 appid = ""
 
 w_dict = {
@@ -84,10 +87,9 @@ class WeatherHistory:
         # Convert temp from Kelvin to Celcius
         df["temp"] = df["temp"].apply(lambda x: x - 273.15)
         self._hist = df
-        return df
 
-    def get_weather_history(self):
-        return self._hist
+    def get_weather_history(self, decimals=1):
+        return self._hist.round(decimals=decimals)
 
     def plot_time_history(self, img_name="weather_hist", img_format=".jpg"):
         fig, ax1 = plt.subplots()
@@ -125,11 +127,10 @@ class WeatherHistory:
         # plt.xticks(rotation=20)
         # plt.show()
 
-    def get_weather_summary(self):
+    def get_weather_summary(self, decimals=1):
         max = self._hist.max()
         min = self._hist.min()
         ave = self._hist.mean()
         combi = pd.concat([min, max, ave], axis=1)
-        combi = combi.round(decimals=1)
         combi = combi.rename(columns={0: "min", 1: "max", 2: "mean"})
-        return combi
+        return combi.round(decimals=decimals)
