@@ -14,40 +14,47 @@ class DataExport:
         # Initialise the Word file
         self.doc = docx.Document()
 
-    def spl_table(self, data, heading=None, decimals=False, dba_alignment="left"):
+    def spl_table(self, data, heading=None, decimals=0, dba_alignment="left"):
+        #TODO: Format the column headers
+
         # Add the table heading
         assert heading is not None
         self.doc.add_heading(heading, 1)
         # Remove decimal points and 0
-        if not decimals:
-            data = data.astype(int)
+        data = data.round(decimals=decimals)
         #TODO: Move A-weighted columns to right
 
         # Initialise the table
-        table = self.doc.add_table(rows=(data.shape[0] + 1), cols=data.shape[1] + 1, style="Table Grid")
+        table = self.doc.add_table(rows=(data.shape[0] + 1), cols=data.shape[1] + 2, style="Table Grid")
         # table.style.TableGrid   # Add in borders
         # Add dates in first column
-        table.cell(0, 0).text = "Date"
-        dates = data.index.tolist()
-        for i in range(data.shape[0]):
-            table.cell(i + 1, 0).text = str(dates[i])
-        # Add column headings
-        for j in range(data.shape[1]):
-            heading = str(data.columns[j])  # Remove index params from spectral column headings
-            heading = heading.split("Hz")
-            if len(heading) > 1:
-                heading = heading[0] + "Hz"
-            else:
-                heading = heading[0]
-            table.cell(0, j + 1).text = heading
+        table.cell(0, 0).text = "Position"  # Label first column
+        table.cell(0, 1).text = "Date"
+        ind = data.index.tolist()
+
         # Loop over the DataFrame and assign data to the Word Table
+        # Position names
         for i in range(data.shape[0]):    # For each row
-            for j in range(data.shape[1]): # Go through each column
+            current_cell = table.cell(i + 1, 0)
+            prev_cell = table.cell(i, 0)
+            if prev_cell.text == str(ind[i][0]):
+                prev_cell.merge(current_cell)
+            else:
+                current_cell.text = str(ind[i][0])
+
+        # Dates
+            table.cell(i + 1, 1).text = str(ind[i][1])
+            for j in range(data.shape[1]):  # Go through each column
+                # Add column headings
+                heading = str(data.columns[j][1])  # Remove index params from spectral column headings
+                if len(data.columns) == 1:  # This occurs if dba_only=True
+                    heading = str(data.columns[j])
+                table.cell(0, j + 2).text = heading
                 # And assign the values in the table.
                 cell = data.iat[i, j]
-                table.cell(i + 1, j + 1).text = str(cell)
+                table.cell(i + 1, j + 2).text = str(cell)
 
-    def weather_table(self, data, heading=None, decimals=True, metrics=["temp", "clouds", "wind_speed"]):
+    def weather_table(self, data, heading=None, decimals=1, metrics=["temp", "clouds", "wind_speed"]):
         assert heading is not None
         self.doc.add_heading(heading, 1)
         #TODO: Add a dict for metric units to be added to the table
@@ -55,8 +62,7 @@ class DataExport:
         # Trim the rows
         data = data.loc[metrics]
         # Remove decimal points and 0
-        if not decimals:
-            data = data.astype(int)
+        data = data.round(decimals=decimals)
         # Initialise the table
         table = self.doc.add_table(rows=data.shape[0] + 1, cols=data.shape[1] + 1, style="Table Grid")
         table.cell(0, 0).text = "Metrics"
